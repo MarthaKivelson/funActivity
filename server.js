@@ -49,12 +49,15 @@ app.get('/api/rooms/:roomCode/rounds/:roundNumber/export', (req, res) => {
   const sheetData = reportRows.map(row => ({
     'Round': row.round,
     'VoterName': row.voterName,
+    'PlayerRole': row.voterRole || '',
     'VoterRole': row.voterRole || '',
     'TimeTakenToVote(Seconds)': row.timeTakenToVote !== null ? row.timeTakenToVote : 'No Vote',
     'VotedPlayerName': row.votedPlayerName,
     'VotedPlayerRole': row.votedPlayerRole || '',
     'PointsAwarded': row.pointsAwarded,
-    'CumulativePointsAfterThisRound': row.cumulativePoints
+    'MrWhiteGuessResult': row.mrWhiteGuessResult || 'Incorrect',
+    'MrWhiteBonusPointsAwarded': row.mrWhiteBonusPointsAwarded || 0,
+    'TotalPointsAfterRound': row.cumulativePoints
   }));
 
   const worksheet = XLSX.utils.json_to_sheet(sheetData);
@@ -168,6 +171,7 @@ function broadcastRoomState(roomCode) {
       scores: room.scores || {},
       showScoreboard: true,
       myRoundPoints,
+      mrWhiteGuesses: room.mrWhiteGuesses || {},
       allowPlayerDownloads: room.allowPlayerDownloads || false,
       currentVoting: room.currentVoting ? {
         startTime: room.currentVoting.startTime,
@@ -217,7 +221,8 @@ io.on('connection', (socket) => {
       showScoreboard: false,
       allowPlayerDownloads: false,
       reports: {},
-      currentVoting: null
+      currentVoting: null,
+      mrWhiteGuesses: {}
     };
 
     socket.join(roomCode);
@@ -369,6 +374,7 @@ io.on('connection', (socket) => {
     room.showScoreboard = false;
     room.allowPlayerDownloads = false;
     room.currentVoting = null;
+    room.mrWhiteGuesses = {};
 
     if (room.votingIntervalId) {
       clearInterval(room.votingIntervalId);
@@ -487,6 +493,59 @@ io.on('connection', (socket) => {
     broadcastRoomState(roomCode);
   });
 
+  // 10. Evaluate Mr. White Guess (Host only)
+  socket.on('evaluate-mr-white-guess', ({ roomCode, playerId, guessResult, bonusPoints }) => {
+    const room = rooms[roomCode];
+    if (!room || room.hostId !== playerId) return;
+    if (room.state !== 'voting-ended') return;
+
+    // Check if there is any Blank (Mr. White) player in the room
+    const hasBlank = room.players.some(p => p.role === 'blank');
+    if (!hasBlank) return;
+
+    // Prevent multiple submissions
+    if (room.mrWhiteGuesses && room.mrWhiteGuesses[room.roundNumber] && room.mrWhiteGuesses[room.roundNumber].evaluated) {
+      console.log(`Mr. White guess already evaluated in room ${roomCode} for round ${room.roundNumber}`);
+      return;
+    }
+
+    const pointsValue = parseInt(bonusPoints, 10) || 15;
+    const isCorrect = guessResult === 'Correct';
+
+    // Store guess result
+    if (!room.mrWhiteGuesses) room.mrWhiteGuesses = {};
+    room.mrWhiteGuesses[room.roundNumber] = {
+      evaluated: true,
+      result: isCorrect ? 'Correct' : 'Incorrect',
+      bonusPoints: isCorrect ? pointsValue : 0
+    };
+
+    // If correct, award bonus points to all blank players and update cumulative score
+    if (isCorrect) {
+      room.players.forEach(p => {
+        if (p.role === 'blank') {
+          if (!room.scores) room.scores = {};
+          room.scores[p.id] = (room.scores[p.id] || 0) + pointsValue;
+        }
+      });
+    }
+
+    // Update the existing round report rows
+    if (room.reports && room.reports[room.roundNumber]) {
+      const reports = room.reports[room.roundNumber];
+      reports.forEach(row => {
+        const player = room.players.find(p => p.id === row.voterId);
+        const isBlank = player && player.role === 'blank';
+        row.mrWhiteGuessResult = isCorrect ? 'Correct' : 'Incorrect';
+        row.mrWhiteBonusPointsAwarded = (isBlank && isCorrect) ? pointsValue : 0;
+        row.cumulativePoints = room.scores[row.voterId] || 0;
+      });
+    }
+
+    console.log(`Mr. White guess evaluated in room ${roomCode} for round ${room.roundNumber}. Result: ${isCorrect ? 'Correct' : 'Incorrect'} (+${isCorrect ? pointsValue : 0} pts)`);
+    broadcastRoomState(roomCode);
+  });
+
 
   // 12. Next Round (Host only)
   socket.on('next-round', ({ roomCode, playerId }) => {
@@ -549,6 +608,14 @@ function processVotingEnded(roomCode) {
     room.votingIntervalId = null;
   }
 
+  // Initialize mrWhiteGuesses entry for this round with default 'Incorrect' result
+  if (!room.mrWhiteGuesses) room.mrWhiteGuesses = {};
+  room.mrWhiteGuesses[room.roundNumber] = {
+    evaluated: false,
+    result: 'Incorrect',
+    bonusPoints: 0
+  };
+
   const { votes, startTime, endTime } = room.currentVoting;
   const activePlayers = room.players.filter(p => p.id !== room.hostId);
   const roundReportRows = [];
@@ -577,7 +644,7 @@ function processVotingEnded(roomCode) {
       } else {
         pointsAwarded = 0;
       }
-      votedPlayerRole = target.role.charAt(0).toUpperCase() + target.role.slice(1);
+      votedPlayerRole = target.role === 'blank' ? 'Mr White' : (target.role.charAt(0).toUpperCase() + target.role.slice(1));
     }
 
     // Ensure score exists
@@ -594,11 +661,13 @@ function processVotingEnded(roomCode) {
       timeTakenToVote,
       voterName: voter.name,
       voterId: voter.id,
-      voterRole: voter.role ? (voter.role.charAt(0).toUpperCase() + voter.role.slice(1)) : '',
+      voterRole: voter.role ? (voter.role === 'blank' ? 'Mr White' : (voter.role.charAt(0).toUpperCase() + voter.role.slice(1))) : '',
       votedPlayerName,
       votedPlayerId: target ? target.id : 'no_vote',
       votedPlayerRole,
       pointsAwarded,
+      mrWhiteGuessResult: 'Incorrect',
+      mrWhiteBonusPointsAwarded: 0,
       cumulativePoints: room.scores[voter.id]
     });
   });

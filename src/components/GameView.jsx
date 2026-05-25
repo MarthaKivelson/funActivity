@@ -16,6 +16,10 @@ export default function GameView({ socket, roomState, playerId, isHost, showToas
   // Show aggregate vote count toggle for host
   const [showAggregateCounts, setShowAggregateCounts] = useState(false);
 
+  // Mr. White Guess state (Host only)
+  const [mrWhiteGuessCorrect, setMrWhiteGuessCorrect] = useState(false);
+  const [bonusPointsOverride, setBonusPointsOverride] = useState(15);
+
   // Host Action Handlers
   const handleDealNewWords = () => {
     socket.emit('start-game', { roomCode: code, playerId });
@@ -49,6 +53,16 @@ export default function GameView({ socket, roomState, playerId, isHost, showToas
 
   const handleDownloadReport = () => {
     window.location.href = `/api/rooms/${code}/rounds/${roundNumber}/export?playerId=${playerId}`;
+  };
+
+  const handleEvaluateMrWhiteGuess = () => {
+    socket.emit('evaluate-mr-white-guess', {
+      roomCode: code,
+      playerId,
+      guessResult: mrWhiteGuessCorrect ? 'Correct' : 'Incorrect',
+      bonusPoints: bonusPointsOverride
+    });
+    showToast('Mr. White guess evaluated!');
   };
 
   const handleVoteSubmit = (targetId) => {
@@ -136,9 +150,9 @@ export default function GameView({ socket, roomState, playerId, isHost, showToas
                 <div key={p.id} className="host-role-item">
                   <span className="bold">{p.name}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span className={`role-badge ${p.role}`}>{p.role}</span>
+                    <span className={`role-badge ${p.role}`}>{p.role === 'blank' ? 'Mr White' : p.role}</span>
                     <span className="italic font-semibold" style={{ color: 'var(--color-secondary)', fontWeight: 600 }}>
-                      {p.role === 'blank' ? 'Blank' : `"${p.word}"`}
+                      {p.role === 'blank' ? 'Mr White' : `"${p.word}"`}
                     </span>
                   </div>
                 </div>
@@ -179,14 +193,14 @@ export default function GameView({ socket, roomState, playerId, isHost, showToas
           {/* Toggle show aggregate votes */}
           <div className="toggle-group" style={{ marginBottom: '1rem' }}>
             <label>Show Aggregate Vote Counts (Host-Only)</label>
-            <span className="switch">
+            <label className="switch">
               <input 
                 type="checkbox" 
                 checked={showAggregateCounts} 
                 onChange={(e) => setShowAggregateCounts(e.target.checked)}
               />
               <span className="slider"></span>
-            </span>
+            </label>
           </div>
 
           <div className="timer-actions">
@@ -362,7 +376,7 @@ export default function GameView({ socket, roomState, playerId, isHost, showToas
                         <td className="bold">{row.voterName}</td>
                         <td>
                           {row.voterRole ? (
-                            <span className={`role-badge ${row.voterRole.toLowerCase()}`}>
+                            <span className={`role-badge ${row.voterRole.toLowerCase() === 'mr white' ? 'blank' : row.voterRole.toLowerCase()}`}>
                               {row.voterRole}
                             </span>
                           ) : (
@@ -374,7 +388,7 @@ export default function GameView({ socket, roomState, playerId, isHost, showToas
                         </td>
                         <td>
                           {row.votedPlayerRole ? (
-                            <span className={`role-badge ${row.votedPlayerRole.toLowerCase()}`}>
+                            <span className={`role-badge ${row.votedPlayerRole.toLowerCase() === 'mr white' ? 'blank' : row.votedPlayerRole.toLowerCase()}`}>
                               {row.votedPlayerRole}
                             </span>
                           ) : (
@@ -386,12 +400,81 @@ export default function GameView({ socket, roomState, playerId, isHost, showToas
                         </td>
                         <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--color-secondary)' }}>
                           +{row.pointsAwarded}
+                          {row.mrWhiteBonusPointsAwarded > 0 && (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-success)', marginLeft: '0.25rem', display: 'block' }}>
+                              (+{row.mrWhiteBonusPointsAwarded} Bonus)
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {/* Mr. White Guess Evaluation Section */}
+              {participants.some(p => p.role === 'blank') && (
+                <div className="card" style={{ background: 'rgba(255, 255, 255, 0.02)', borderColor: 'var(--border-glass)', padding: '1.25rem', marginBottom: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1rem', color: 'var(--color-primary)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    🕵️‍♂️ Mr. White Guess Result
+                  </h3>
+                  
+                  {roomState.mrWhiteGuesses && roomState.mrWhiteGuesses[roundNumber]?.evaluated ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      <p style={{ fontSize: '0.9rem', margin: 0 }}>
+                        Status: <span style={{ fontWeight: 'bold', color: roomState.mrWhiteGuesses[roundNumber].result === 'Correct' ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                          {roomState.mrWhiteGuesses[roundNumber].result === 'Correct' ? '✅ Correct' : '❌ Incorrect'}
+                        </span>
+                      </p>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
+                        Bonus Points Awarded: <span style={{ fontWeight: 'bold', color: 'var(--color-secondary)' }}>+{roomState.mrWhiteGuesses[roundNumber].bonusPoints} pts</span>
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex-col" style={{ gap: '1rem' }}>
+                      <div className="toggle-group" style={{ justifyContent: 'space-between' }}>
+                        <label style={{ fontSize: '0.9rem' }}>Guess is Correct</label>
+                        <label className="switch">
+                          <input 
+                            type="checkbox" 
+                            checked={mrWhiteGuessCorrect} 
+                            onChange={(e) => setMrWhiteGuessCorrect(e.target.checked)}
+                          />
+                          <span className="slider"></span>
+                        </label>
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                        <label style={{ fontSize: '0.9rem' }}>Bonus Points Override:</label>
+                        <input 
+                          type="number" 
+                          min="0"
+                          max="100"
+                          style={{
+                            width: '4rem',
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: '4px',
+                            border: '1px solid var(--border-glass)',
+                            background: 'rgba(0,0,0,0.2)',
+                            color: 'white',
+                            textAlign: 'center'
+                          }}
+                          value={bonusPointsOverride}
+                          onChange={(e) => setBonusPointsOverride(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        />
+                      </div>
+                      
+                      <button 
+                        className="btn btn-primary" 
+                        style={{ marginTop: '0.5rem' }} 
+                        onClick={handleEvaluateMrWhiteGuess}
+                      >
+                        Evaluate Mr. White Guess
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Action and Download deck */}
               <div className="flex-col" style={{ gap: '0.75rem' }}>
@@ -472,10 +555,10 @@ export default function GameView({ socket, roomState, playerId, isHost, showToas
                   {isHost && p.role && (
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginLeft: '0.5rem' }}>
                       <span className={`role-badge ${p.role}`} style={{ fontSize: '0.6rem', padding: '1px 4px' }}>
-                        {p.role}
+                        {p.role === 'blank' ? 'Mr White' : p.role}
                       </span>
                       <span style={{ color: 'var(--color-secondary)', fontSize: '0.8rem', fontWeight: 600, fontStyle: 'italic' }}>
-                        {p.role === 'blank' ? 'Blank' : `"${p.word}"`}
+                        {p.role === 'blank' ? 'Mr White' : `"${p.word}"`}
                       </span>
                     </div>
                   )}

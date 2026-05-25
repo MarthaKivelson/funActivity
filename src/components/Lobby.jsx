@@ -92,7 +92,7 @@ export default function Lobby({ socket, roomState, playerId, isHost, showToast, 
           {/* Blanks Settings */}
           <div className="config-row">
             <div className="config-info">
-              <span className="config-title">Blank Roles</span>
+              <span className="config-title">Mr White</span>
               <span className="config-desc">Players with no word (0-2)</span>
             </div>
             <div className="config-controls">

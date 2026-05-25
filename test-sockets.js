@@ -78,18 +78,19 @@ async function runTest() {
     process.exit(1);
   }
 
-  // Update Config: 1 Spy, 0 Blanks
+  // Update Config: 1 Spy, 1 Mr. White (Blank)
   hostSocket.emit('update-config', {
     roomCode,
     playerId: hostId,
     config: {
       undercovers: 1,
-      blanks: 0
+      blanks: 1
     }
   });
 
   await wait(500);
   console.log(`[Config Check] Undercover count config: ${roomStates.host.config.undercovers} (Expected: 1)`);
+  console.log(`[Config Check] Blank count config: ${roomStates.host.config.blanks} (Expected: 1)`);
 
   // Start game / Deal words
   console.log('Host starting game (dealing words)...');
@@ -129,45 +130,36 @@ async function runTest() {
     process.exit(1);
   }
 
-  // Find player identities to vote correctly
+  // Find player roles dynamically
   const undercoverPlayer = roomStates.host.players.find(p => p.role === 'undercover');
-  const civilianPlayers = roomStates.host.players.filter(p => p.role === 'civilian');
+  const blankPlayer = roomStates.host.players.find(p => p.role === 'blank');
+  const civilianPlayer = roomStates.host.players.find(p => p.role === 'civilian');
 
-  // Let's submit votes dynamically based on role assignment
-  const aliceIsUndercover = undercoverPlayer.id === player1Id;
-  const bobIsUndercover = undercoverPlayer.id === player2Id;
+  // Map IDs to names/sockets for voting
+  const playerSockets = {
+    [player1Id]: aliceSocket,
+    [player2Id]: bobSocket,
+    [player3Id]: charlieSocket
+  };
 
-  let aliceTargetId, bobTargetId;
-  let expectedAlicePoints = 0;
-  let expectedBobPoints = 0;
+  const playerNames = {
+    [player1Id]: 'Alice',
+    [player2Id]: 'Bob',
+    [player3Id]: 'Charlie'
+  };
 
-  if (aliceIsUndercover) {
-    // Alice is spy. She votes for civilian Bob. Bob is civilian => Alice gets 0 points.
-    aliceTargetId = player2Id;
-    expectedAlicePoints = 0;
-  } else {
-    // Alice is civilian. She votes for undercover player. Target is undercover => Alice gets 10 points.
-    aliceTargetId = undercoverPlayer.id;
-    expectedAlicePoints = 10;
-  }
+  // Submit votes:
+  // - Civilian votes for Undercover (10 points)
+  // - Blank votes for Undercover (10 points)
+  // - Undercover votes for Civilian (0 points)
+  console.log(`[Vote Submit] ${playerNames[civilianPlayer.id]} (Civilian) votes for Undercover ${undercoverPlayer.name}`);
+  playerSockets[civilianPlayer.id].emit('submit-vote', { roomCode, playerId: civilianPlayer.id, targetId: undercoverPlayer.id });
 
-  if (bobIsUndercover) {
-    // Bob is spy. He votes for civilian Alice. Alice is civilian => Bob gets 0 points.
-    bobTargetId = player1Id;
-    expectedBobPoints = 0;
-  } else {
-    // Bob is civilian. He votes for undercover player. Target is undercover => Bob gets 10 points.
-    bobTargetId = undercoverPlayer.id;
-    expectedBobPoints = 10;
-  }
+  console.log(`[Vote Submit] ${playerNames[blankPlayer.id]} (Mr. White) votes for Undercover ${undercoverPlayer.name}`);
+  playerSockets[blankPlayer.id].emit('submit-vote', { roomCode, playerId: blankPlayer.id, targetId: undercoverPlayer.id });
 
-  console.log(`[Vote Submit] Alice (${aliceIsUndercover ? 'spy' : 'civ'}) votes for ${aliceTargetId === undercoverPlayer.id ? 'Spy ' + undercoverPlayer.name : 'Civ Bob'}`);
-  aliceSocket.emit('submit-vote', { roomCode, playerId: player1Id, targetId: aliceTargetId });
-
-  console.log(`[Vote Submit] Bob (${bobIsUndercover ? 'spy' : 'civ'}) votes for ${bobTargetId === undercoverPlayer.id ? 'Spy ' + undercoverPlayer.name : 'Civ Alice'}`);
-  bobSocket.emit('submit-vote', { roomCode, playerId: player2Id, targetId: bobTargetId });
-
-  // Charlie does not vote => should get 0 points
+  console.log(`[Vote Submit] ${playerNames[undercoverPlayer.id]} (Undercover) votes for Civilian ${civilianPlayer.name}`);
+  playerSockets[undercoverPlayer.id].emit('submit-vote', { roomCode, playerId: undercoverPlayer.id, targetId: civilianPlayer.id });
 
   await wait(500);
 
@@ -182,42 +174,74 @@ async function runTest() {
     process.exit(1);
   }
 
-  // Check scoreboard & reports
-  console.log('Checking calculated points...');
-  const aliceScore = roomStates.host.scores[player1Id];
-  const bobScore = roomStates.host.scores[player2Id];
-  const charlieScore = roomStates.host.scores[player3Id];
+  // Check initial scores from voting (before Mr. White guess evaluation)
+  console.log('Checking initial calculated points (voting only)...');
+  const civVotingScore = roomStates.host.scores[civilianPlayer.id];
+  const undercoverVotingScore = roomStates.host.scores[undercoverPlayer.id];
+  const blankVotingScore = roomStates.host.scores[blankPlayer.id];
 
-  console.log(` - Alice: Score = ${aliceScore} (Expected: ${expectedAlicePoints})`);
-  console.log(` - Bob: Score = ${bobScore} (Expected: ${expectedBobPoints})`);
-  console.log(` - Charlie (did not vote): Score = ${charlieScore} (Expected: 0)`);
+  console.log(` - Civilian (${playerNames[civilianPlayer.id]}): Score = ${civVotingScore} (Expected: 10)`);
+  console.log(` - Undercover (${playerNames[undercoverPlayer.id]}): Score = ${undercoverVotingScore} (Expected: 0)`);
+  console.log(` - Mr. White (${playerNames[blankPlayer.id]}): Score = ${blankVotingScore} (Expected: 10)`);
 
-  if (aliceScore !== expectedAlicePoints || bobScore !== expectedBobPoints || charlieScore !== 0) {
-    console.error('FAILED: Points calculation is incorrect.');
+  if (civVotingScore !== 10 || undercoverVotingScore !== 0 || blankVotingScore !== 10) {
+    console.error('FAILED: Initial voting points calculation is incorrect.');
     process.exit(1);
   }
 
-  // Check myRoundPoints values sent to individual players
-  console.log('Checking individual player myRoundPoints...');
-  console.log(` - Alice myRoundPoints = ${roomStates.alice.myRoundPoints} (Expected: ${expectedAlicePoints})`);
-  console.log(` - Bob myRoundPoints = ${roomStates.bob.myRoundPoints} (Expected: ${expectedBobPoints})`);
-  console.log(` - Charlie myRoundPoints = ${roomStates.charlie.myRoundPoints} (Expected: 0)`);
+  // Host evaluates Mr. White's guess as Correct (+15 pts)
+  console.log('Host evaluating Mr. White guess as Correct (+15 points)...');
+  hostSocket.emit('evaluate-mr-white-guess', {
+    roomCode,
+    playerId: hostId,
+    guessResult: 'Correct',
+    bonusPoints: 15
+  });
+  await wait(1000);
+
+  // Verify updated scores including guess bonus
+  console.log('Checking scores after guess evaluation...');
+  const civFinalScore = roomStates.host.scores[civilianPlayer.id];
+  const undercoverFinalScore = roomStates.host.scores[undercoverPlayer.id];
+  const blankFinalScore = roomStates.host.scores[blankPlayer.id];
+
+  console.log(` - Civilian (${playerNames[civilianPlayer.id]}): Score = ${civFinalScore} (Expected: 10)`);
+  console.log(` - Undercover (${playerNames[undercoverPlayer.id]}): Score = ${undercoverFinalScore} (Expected: 0)`);
+  console.log(` - Mr. White (${playerNames[blankPlayer.id]}): Score = ${blankFinalScore} (Expected: 25)`);
+
+  if (civFinalScore !== 10 || undercoverFinalScore !== 0 || blankFinalScore !== 25) {
+    console.error('FAILED: Final points calculation including guess bonus is incorrect.');
+    process.exit(1);
+  }
+
+  // Check report content for correct columns and values
+  console.log('Checking generated round report data...');
+  if (!roomStates.host.currentReport || roomStates.host.currentReport.length !== 3) {
+    console.error('FAILED: Round report not generated or length mismatch.');
+    process.exit(1);
+  }
+
+  const blankReportRow = roomStates.host.currentReport.find(r => r.voterId === blankPlayer.id);
+  const civReportRow = roomStates.host.currentReport.find(r => r.voterId === civilianPlayer.id);
+
+  console.log(` - Blank report row result: ${blankReportRow.mrWhiteGuessResult} (Expected: Correct)`);
+  console.log(` - Blank report row bonus awarded: ${blankReportRow.mrWhiteBonusPointsAwarded} (Expected: 15)`);
+  console.log(` - Blank report row cumulativePoints: ${blankReportRow.cumulativePoints} (Expected: 25)`);
+  console.log(` - Civilian report row result: ${civReportRow.mrWhiteGuessResult} (Expected: Correct)`);
+  console.log(` - Civilian report row bonus awarded: ${civReportRow.mrWhiteBonusPointsAwarded} (Expected: 0)`);
+  console.log(` - Civilian report row cumulativePoints: ${civReportRow.cumulativePoints} (Expected: 10)`);
 
   if (
-    roomStates.alice.myRoundPoints !== expectedAlicePoints ||
-    roomStates.bob.myRoundPoints !== expectedBobPoints ||
-    roomStates.charlie.myRoundPoints !== 0
+    blankReportRow.mrWhiteGuessResult !== 'Correct' ||
+    blankReportRow.mrWhiteBonusPointsAwarded !== 15 ||
+    blankReportRow.cumulativePoints !== 25 ||
+    civReportRow.mrWhiteGuessResult !== 'Correct' ||
+    civReportRow.mrWhiteBonusPointsAwarded !== 0 ||
+    civReportRow.cumulativePoints !== 10
   ) {
-    console.error('FAILED: Individual player myRoundPoints calculation/payload broadcast is incorrect.');
+    console.error('FAILED: Report row formatting/bonus mapping is incorrect.');
     process.exit(1);
   }
-
-  // Check report presence
-  if (!roomStates.host.currentReport || roomStates.host.currentReport.length === 0) {
-    console.error('FAILED: Report was not generated/sent to host.');
-    process.exit(1);
-  }
-  console.log(`[Report Check] Report generated successfully. Rows count: ${roomStates.host.currentReport.length}`);
 
   // Test next-round transition
   console.log('Host starting next round (moving back to lobby)...');
@@ -225,11 +249,11 @@ async function runTest() {
   await wait(1000);
 
   console.log(`[Next Round Check] Game state: ${roomStates.host.state} (Expected: lobby)`);
-  console.log(`[Next Round Check] Alice score preserved: ${roomStates.host.scores[player1Id]} (Expected: ${expectedAlicePoints})`);
+  console.log(`[Next Round Check] Mr. White score preserved: ${roomStates.host.scores[blankPlayer.id]} (Expected: 25)`);
   const aliceNextRole = roomStates.host.players.find(p => p.name === 'Alice').role;
   console.log(`[Next Round Check] Alice role cleared: ${aliceNextRole} (Expected: null)`);
 
-  if (roomStates.host.state !== 'lobby' || roomStates.host.scores[player1Id] !== expectedAlicePoints || aliceNextRole !== null) {
+  if (roomStates.host.state !== 'lobby' || roomStates.host.scores[blankPlayer.id] !== 25 || aliceNextRole !== null) {
     console.error('FAILED: Next round did not initialize correctly.');
     process.exit(1);
   }

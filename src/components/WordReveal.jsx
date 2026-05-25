@@ -28,7 +28,7 @@ export default function WordReveal({ player }) {
         <div className="word-box-inner flex-col text-center" style={{ gap: '0.5rem' }}>
           <ShieldAlert size={28} style={{ color: 'var(--color-danger)', margin: '0 auto' }} />
           <span style={{ fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--color-danger)', fontWeight: 700 }}>
-            Blank Role
+            Mr White
           </span>
           <span className="reveal-word-text" style={{ color: 'var(--color-danger)', textShadow: 'none' }}>
             No Word!
