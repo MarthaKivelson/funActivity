@@ -396,7 +396,7 @@ export default function GameView({ socket, roomState, playerId, isHost, showToas
                           )}
                         </td>
                         <td>
-                          {row.timeTakenToVote !== null ? `${row.timeTakenToVote}s` : <span style={{ color: 'var(--color-danger)' }}>No Vote</span>}
+                          {row.timeTakenToVote !== null ? `${row.timeTakenToVote.toFixed(2)}s` : <span style={{ color: 'var(--color-danger)' }}>No Vote</span>}
                         </td>
                         <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--color-secondary)' }}>
                           +{row.pointsAwarded}
@@ -553,14 +553,9 @@ export default function GameView({ socket, roomState, playerId, isHost, showToas
 
                   {/* Host view of player's secret info */}
                   {isHost && p.role && (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginLeft: '0.5rem' }}>
-                      <span className={`role-badge ${p.role}`} style={{ fontSize: '0.6rem', padding: '1px 4px' }}>
-                        {p.role === 'blank' ? 'Mr White' : p.role}
-                      </span>
-                      <span style={{ color: 'var(--color-secondary)', fontSize: '0.8rem', fontWeight: 600, fontStyle: 'italic' }}>
-                        {p.role === 'blank' ? 'Mr White' : `"${p.word}"`}
-                      </span>
-                    </div>
+                    <span style={{ color: 'var(--color-secondary)', fontSize: '0.8rem', fontWeight: 600, fontStyle: 'italic', marginLeft: '0.5rem' }}>
+                      {p.role === 'blank' ? 'Mr White' : `"${p.word}"`}
+                    </span>
                   )}
                 </div>
                 

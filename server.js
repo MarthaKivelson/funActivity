@@ -49,13 +49,12 @@ app.get('/api/rooms/:roomCode/rounds/:roundNumber/export', (req, res) => {
   const sheetData = reportRows.map(row => ({
     'Round': row.round,
     'VoterName': row.voterName,
+    'SecretWord': row.voterWord || '',
     'PlayerRole': row.voterRole || '',
-    'VoterRole': row.voterRole || '',
-    'TimeTakenToVote(Seconds)': row.timeTakenToVote !== null ? row.timeTakenToVote : 'No Vote',
+    'TimeTakenToVote(Seconds)': row.timeTakenToVote !== null ? `${row.timeTakenToVote.toFixed(2)} secs` : 'No Vote',
     'VotedPlayerName': row.votedPlayerName,
     'VotedPlayerRole': row.votedPlayerRole || '',
     'PointsAwarded': row.pointsAwarded,
-    'MrWhiteGuessResult': row.mrWhiteGuessResult || 'Incorrect',
     'MrWhiteBonusPointsAwarded': row.mrWhiteBonusPointsAwarded || 0,
     'TotalPointsAfterRound': row.cumulativePoints
   }));
@@ -629,7 +628,7 @@ function processVotingEnded(roomCode) {
     let timeTakenToVote = null;
 
     if (vote) {
-      timeTakenToVote = Math.max(0, Math.round((vote.timestamp - startTime) / 1000));
+      timeTakenToVote = Math.max(0, parseFloat(((vote.timestamp - startTime) / 1000).toFixed(2)));
       if (vote.targetId) {
         target = room.players.find(p => p.id === vote.targetId);
       }
@@ -662,6 +661,7 @@ function processVotingEnded(roomCode) {
       voterName: voter.name,
       voterId: voter.id,
       voterRole: voter.role ? (voter.role === 'blank' ? 'Mr White' : (voter.role.charAt(0).toUpperCase() + voter.role.slice(1))) : '',
+      voterWord: voter.word || '',
       votedPlayerName,
       votedPlayerId: target ? target.id : 'no_vote',
       votedPlayerRole,

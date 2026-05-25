@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import * as XLSX from 'xlsx';
 
 console.log('Starting Simplified Undercover Game Socket Integration Test...');
 
@@ -240,6 +241,99 @@ async function runTest() {
     civReportRow.cumulativePoints !== 10
   ) {
     console.error('FAILED: Report row formatting/bonus mapping is incorrect.');
+    process.exit(1);
+  }
+
+  // Assert secret word and float time
+  console.log(` - Blank report row voterWord: "${blankReportRow.voterWord}" (Expected: "")`);
+  console.log(` - Civilian report row voterWord: "${civReportRow.voterWord}" (Expected: "${civilianPlayer.word}")`);
+  console.log(` - Blank report row timeTakenToVote: ${blankReportRow.timeTakenToVote} (Expected: number)`);
+
+  if (blankReportRow.voterWord !== '') {
+    console.error('FAILED: Blank player voterWord is not empty.');
+    process.exit(1);
+  }
+
+  if (civReportRow.voterWord !== civilianPlayer.word) {
+    console.error('FAILED: Civilian player voterWord mismatch.');
+    process.exit(1);
+  }
+
+  if (typeof blankReportRow.timeTakenToVote !== 'number' || blankReportRow.timeTakenToVote < 0) {
+    console.error('FAILED: timeTakenToVote is not a valid number.');
+    process.exit(1);
+  }
+
+  // Verify Excel export via HTTP endpoint
+  console.log('Verifying downloadable Excel round report...');
+  const res = await fetch(`${SERVER_URL}/api/rooms/${roomCode}/rounds/1/export?playerId=${hostId}`);
+  if (!res.ok) {
+    console.error(`FAILED: Export endpoint returned status ${res.status}`);
+    process.exit(1);
+  }
+  
+  const arrayBuffer = await res.arrayBuffer();
+  const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(worksheet);
+
+  console.log(`Excel sheet rows count: ${rows.length} (Expected: 3)`);
+  if (rows.length !== 3) {
+    console.error('FAILED: Excel sheet row count mismatch');
+    process.exit(1);
+  }
+
+  // Check columns present in the first row
+  const rowKeys = Object.keys(rows[0]);
+  console.log('Excel columns found:', rowKeys);
+  const expectedKeys = [
+    'Round',
+    'VoterName',
+    'SecretWord',
+    'PlayerRole',
+    'TimeTakenToVote(Seconds)',
+    'VotedPlayerName',
+    'VotedPlayerRole',
+    'PointsAwarded',
+    'MrWhiteBonusPointsAwarded',
+    'TotalPointsAfterRound'
+  ];
+
+  for (let i = 0; i < expectedKeys.length; i++) {
+    if (rowKeys[i] !== expectedKeys[i]) {
+      console.error(`FAILED: Column mismatch at index ${i}. Expected "${expectedKeys[i]}", got "${rowKeys[i]}"`);
+      process.exit(1);
+    }
+  }
+
+  // Also assert VoterRole and MrWhiteGuessResult are NOT in keys
+  if (rowKeys.includes('VoterRole') || rowKeys.includes('MrWhiteGuessResult')) {
+    console.error('FAILED: Removed columns (VoterRole or MrWhiteGuessResult) were found in the sheet');
+    process.exit(1);
+  }
+
+  // Check a specific row's content
+  const blankRow = rows.find(r => r.VoterName === blankPlayer.name);
+  const civRow = rows.find(r => r.VoterName === civilianPlayer.name);
+
+  console.log(` - Blank Excel row SecretWord: "${blankRow.SecretWord}" (Expected: "")`);
+  console.log(` - Civilian Excel row SecretWord: "${civRow.SecretWord}" (Expected: "${civilianPlayer.word}")`);
+  console.log(` - Blank Excel row TimeTakenToVote(Seconds): "${blankRow['TimeTakenToVote(Seconds)']}" (Expected: "XX.XX secs")`);
+
+  if (blankRow.SecretWord !== '') {
+    console.error('FAILED: Blank player SecretWord in Excel is not empty');
+    process.exit(1);
+  }
+
+  if (civRow.SecretWord !== civilianPlayer.word) {
+    console.error(`FAILED: Civilian player SecretWord in Excel mismatch. Expected "${civilianPlayer.word}", got "${civRow.SecretWord}"`);
+    process.exit(1);
+  }
+
+  const timeVal = blankRow['TimeTakenToVote(Seconds)'];
+  if (typeof timeVal !== 'string' || !/^\d+\.\d{2} secs$/.test(timeVal)) {
+    console.error(`FAILED: TimeTakenToVote format in Excel is incorrect. Got "${timeVal}", expected e.g. "0.50 secs"`);
     process.exit(1);
   }
 
