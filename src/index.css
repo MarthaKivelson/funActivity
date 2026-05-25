@@ -845,3 +845,96 @@ h2 {
 .bold {
   font-weight: 700;
 }
+
+/* Scoreboard & Report Tables */
+.table-container {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-glass);
+  background: rgba(15, 23, 42, 0.25);
+}
+.score-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.9rem;
+}
+.score-table th, .score-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-glass);
+}
+.score-table th {
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.score-table tr:last-child td {
+  border-bottom: none;
+}
+.score-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Toggle Switches */
+.toggle-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: rgba(15, 23, 42, 0.3);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.75rem;
+}
+.toggle-group label {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.1);
+  transition: .3s;
+  border-radius: 24px;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+.switch input:checked + .slider {
+  background-color: var(--color-primary);
+}
+.switch input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+/* Timer layout inside game view */
+.timer-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}

@@ -2,10 +2,10 @@ import React from 'react';
 import { Users, Settings, Play, LogOut, Copy } from 'lucide-react';
 
 export default function Lobby({ socket, roomState, playerId, isHost, showToast, onLeave }) {
-  const { code, config, players } = roomState;
+  const { code, config, players, hostId } = roomState;
   
   // Players excluding the host (these are the active participants who get assigned roles)
-  const activePlayers = players.filter(p => p.role !== 'host');
+  const activePlayers = players.filter(p => p.id !== hostId);
   
   const handleCopyLink = () => {
     // Generate joinable URL
@@ -116,6 +116,37 @@ export default function Lobby({ socket, roomState, playerId, isHost, showToast, 
             </div>
           </div>
 
+          {/* Voting Duration Settings */}
+          <div className="config-row">
+            <div className="config-info">
+              <span className="config-title">Voting Duration</span>
+              <span className="config-desc">Timer length (15s - 300s)</span>
+            </div>
+            <div className="config-controls">
+              <button 
+                type="button" 
+                className="btn-counter" 
+                disabled={(config.votingDuration || 60) <= 15}
+                onClick={() => updateConfig('votingDuration', Math.max(15, (config.votingDuration || 60) - 15))}
+              >
+                -
+              </button>
+              <span className="counter-value" style={{ minWidth: '3.5rem', textAlign: 'center' }}>
+                {config.votingDuration || 60}s
+              </span>
+              <button 
+                type="button" 
+                className="btn-counter" 
+                disabled={(config.votingDuration || 60) >= 300}
+                onClick={() => updateConfig('votingDuration', Math.min(300, (config.votingDuration || 60) + 15))}
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+
+
         </div>
       )}
 
@@ -127,7 +158,7 @@ export default function Lobby({ socket, roomState, playerId, isHost, showToast, 
       <div className="players-list mb-6" style={{ marginTop: '1rem' }}>
         {players.map((p) => {
           const isPlayerSelf = p.id === playerId;
-          const isPlayerHost = p.role === 'host';
+          const isPlayerHost = p.id === hostId;
           return (
             <div key={p.id} className={`player-tag ${isPlayerHost ? 'host' : ''}`}>
               <div className="player-name-wrapper">
@@ -141,6 +172,39 @@ export default function Lobby({ socket, roomState, playerId, isHost, showToast, 
           );
         })}
       </div>
+
+      {/* Scoreboard Section */}
+      {Object.keys(roomState.scores || {}).length > 0 && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.15rem', borderBottom: '1px solid var(--border-glass)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            🏆 Cumulative Scoreboard
+          </h2>
+          <div className="table-container">
+            <table className="score-table">
+              <thead>
+                <tr>
+                  <th>Player Name</th>
+                  <th style={{ textAlign: 'right' }}>Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {players
+                  .filter(p => p.id !== hostId)
+                  .map(p => (
+                    <tr key={p.id}>
+                      <td>
+                        {p.name} {p.id === playerId ? <span className="badge badge-you">You</span> : ''}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--color-secondary)' }}>
+                        {roomState.scores[p.id] || 0} pts
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Actions Footer */}
       <div className="flex-col" style={{ gap: '0.75rem' }}>

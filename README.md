@@ -1,92 +1,98 @@
-# Undercover - Multiplayer Word Party Game
+# Undercover - Multiplayer Party Game (with Voting & Excel Reports)
 
-Undercover is a web-based, real-time multiplayer party game designed for a Host and up to 24 Players (total 25 participants). Players describe their secret words and vote to eliminate the undercover spies. 
+Undercover is a web-based, real-time multiplayer party game designed for a Host and up to 24 Players (total 25 participants). Players describe their secret words (revealed privately on their devices) and vote on who they suspect is the Undercover spy or Blank player.
 
-This app is optimized for mobile screens, making it perfect for players to join on their phones while discussing/arguing over a Microsoft Teams, Zoom, or Discord voice call!
+This app is optimized for mobile screens, making it perfect for players to join on their phones while discussing/arguing over an external call (e.g., Microsoft Teams, Zoom, or Discord voice call)!
 
 ---
 
-## 🎮 Game Rules
+## 🎮 Game Rules & Lifecycle
 
 1. **Roles**:
-   - **Civilians** (Majority): Given the secret Civilian Word.
-   - **Undercovers** (Configurable count): Given a word that is very similar to the Civilian Word.
-   - **Blanks** (Optional, 0-2 players): Given NO word at all!
+   - **Civilians**: Given the secret Civilian Word.
+   - **Undercovers**: Given a word very similar to the Civilian Word.
+   - **Blanks**: Given NO word at all!
 2. **Phase 1: Word Reveal & Descriptions**:
-   - Each player secretly views their word by holding the "Reveal My Word" button.
+   - Each player secretly views their word by holding the "Reveal My Word" button on their screen.
    - Players take turns describing their word out loud (e.g., via Teams call) using a single word or short phrase.
-   - *Goal*: Civilians try to identify who has a different word. Undercovers try to deduce the Civilian word and blend in. Blanks try to sound like they have a word!
-3. **Phase 2: Voting & Eliminations**:
-   - The host triggers the voting round.
-   - Players vote on their devices to eliminate who they think is the Undercover or Blank.
-   - The player with the most votes is eliminated. Their role is revealed (but not their secret word).
-4. **Winning Conditions**:
-   - **Civilians Win**: If all Undercovers are successfully eliminated.
-   - **Undercovers Win**: If the number of alive Undercovers equals or exceeds the number of alive Civilians.
+   - *Goal*: Civilians try to identify who has a different word. Undercovers try to blend in. Blanks try to sound like they have a word!
+3. **Phase 2: Host-Controlled Voting**:
+   - The host triggers the voting round once discussions finish by clicking **Start Voting Phase**.
+   - A configurable timer counts down. Players select one target they suspect is the Undercover/Blank and click to submit. Votes can be changed until time ends.
+   - **No Auto-Elimination**: Voting is for scoring only. The app does not eliminate any players or judge their roles in-app. When voting ends, players see a "Voting closed" confirmation.
+4. **Phase 3: Points Calculation & Summary**:
+   - Scores are computed server-side and cumulative scoreboard totals are updated.
+   - The host reviews the **Round Summary** (who voted for whom, points earned, cumulative scores) and can download the round's spreadsheet.
+   - Host clicks **Next Round** to return to the lobby (preserving cumulative scores, but resetting words/roles for the next round).
 
 ---
 
-## 🛠️ Technical Architecture
+## 🗳️ Voting Configuration & Controls
 
-- **Frontend**: React (Vite) + Vanilla CSS (Custom dark theme with neon glassmorphism).
-- **Backend**: Node.js + Express + Socket.io.
-- **State Synchronization**: Real-time websocket messaging.
-- **Persistence**: Sessions and IDs are saved in `localStorage`, meaning players can refresh their browser or rejoin after dropping connection without disrupting the game state.
+- **Setting Voting Duration**: 
+  - The host can set the voting duration (in seconds) during the **Lobby** settings panel or during the **Word Reveal** phase on the GameView.
+  - Controls allow incrementing/decrementing duration in 15-second blocks (range: 15s to 300s, default 60s).
+- **Manual Closing**:
+  - The host can end the voting phase early at any time by clicking **End Voting Now**.
+- **Timer Extensions**:
+  - The host can add time to the countdown in 15-second increments at any time by clicking **Extend +15s**.
+
+---
+
+## 🏆 Scoring Rules (Computed Server-Side)
+
+Points are awarded to the **voter** based on the secret role of the **voted target** at the end of the voting countdown:
+- Voted target is **Undercover** => Voter receives **10 points**
+- Voted target is **Blank** => Voter receives **5 points**
+- Voted target is **Civilian** => Voter receives **0 points**
+- **Non-Voter Penalty**: If a player does not submit a vote before the timer expires, they receive **0 points** (recorded as "No Vote").
+
+*Note: Target roles are computed privately on the server and are not displayed to players in the app to maintain game integrity.*
+
+---
+
+## 📊 Excel Export & Data Storage
+
+- **How to Download Reports**:
+  - After each voting round finishes, the host can click **Download Round Report (.xlsx)** on the results screen.
+  - The browser will download a file named like: `VotingRound_<roundNumber>_<YYYYMMDD_HHMM>.xlsx`.
+  - The spreadsheet contains the following columns for each voter:
+    - **Round**
+    - **VotingStartTime**
+    - **VotingEndTime**
+    - **VoterName**
+    - **VotedPlayerName** (or "No Vote")
+    - **VotedPlayerRole** (Civilian, Undercover, Blank, or empty)
+    - **PointsAwarded** (10, 5, or 0)
+    - **CumulativePointsAfterThisRound**
+- **Where Vote Data is Stored**:
+  - Vote submissions, player roles, and scoring reports are stored **temporarily in-memory** on the Node.js server.
+  - Session details and reconnect tokens are preserved in the clients' `sessionStorage` to recover from connection drops or refreshes.
+  - If the host restarts the server or triggers **End Game / Return to Lobby (Reset Game)**, all scores and stored report data will be wiped.
 
 ---
 
 ## 🚀 Quick Start Guide
 
-### Prerequisites
-Make sure you have [Node.js](https://nodejs.org/) installed (v16.0.0 or higher recommended).
-
 ### 1. Install Dependencies
-Navigate to the project root and run:
+Run from the root directory:
 ```bash
 npm install
 ```
 
 ### 2. Run in Development Mode
-To start both the backend Socket.io server and the Vite dev server concurrently, run:
+Starts both backend socket and frontend dev servers concurrently:
 ```bash
 npm run dev
 ```
-- The backend server starts on port `5000`.
-- The frontend dev server starts on port `5173`.
-- Open [http://localhost:5173](http://localhost:5173) in your browser.
-
-*Note: In development, Vite will automatically proxy websocket connections from port `5173` to port `5000`, preventing CORS issues.*
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ### 3. Production Build & Run
-To compile the frontend bundle and run the unified Express app:
 ```bash
-# Build the React production assets
+# Build React static bundles
 npm run build
 
-# Start the production server
+# Start the unified Express production server
 npm run start
 ```
 Open [http://localhost:5000](http://localhost:5000) in your browser.
-
----
-
-## 📂 Project Structure
-
-```
-undercover-game/
-├── server.js             # Express & Socket.io server logic
-├── package.json          # Dependency configurations & scripts
-├── vite.config.js        # Vite configurations (with dev proxy settings)
-├── index.html            # Entry HTML page
-├── README.md             # This readme file
-└── src/
-    ├── main.jsx          # React mount point
-    ├── App.jsx           # Main router & socket events listener
-    ├── index.css         # Styling system (Vanilla CSS variables & animations)
-    ├── words.js          # Library of similar word pairs
-    └── components/
-        ├── JoinRoom.jsx  # Room creation and joining UI
-        ├── Lobby.jsx     # Waiting room with Host settings panels
-        ├── GameView.jsx  # Primary play flow (Reveal, Voting, and Results)
-        └── WordReveal.jsx# Private press-to-reveal word module
-```
