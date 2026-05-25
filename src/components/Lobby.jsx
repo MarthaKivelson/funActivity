@@ -132,8 +132,9 @@ export default function Lobby({ socket, roomState, playerId, isHost, showToast, 
             <div key={p.id} className={`player-tag ${isPlayerHost ? 'host' : ''}`}>
               <div className="player-name-wrapper">
                 <div className={`status-dot ${p.isConnected ? 'online' : 'offline'}`} />
-                <span>{p.name}</span>
-                {isPlayerHost && <span className="badge badge-host">Host</span>}
+                <span>
+                  {p.name} <span style={{ color: 'var(--text-muted)', fontWeight: 'normal', fontSize: '0.9em' }}>{isPlayerHost ? '(Host)' : '(Player)'}</span>
+                </span>
                 {isPlayerSelf && <span className="badge badge-you">You</span>}
               </div>
             </div>

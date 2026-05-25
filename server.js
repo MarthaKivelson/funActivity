@@ -68,17 +68,23 @@ function broadcastRoomState(roomCode) {
       const isSelf = p.id === player.id;
       const isRecipientHost = player.id === room.hostId;
       
-      // Reveal role/word only if:
+      // Reveal role only if:
       // 1. It is the player themselves
       // 2. The recipient is the host
-      const shouldReveal = isSelf || isRecipientHost;
+      // 3. The player is the host (everyone knows who the host is)
+      const shouldRevealRole = isSelf || isRecipientHost || p.role === 'host';
+      
+      // Reveal word only if:
+      // 1. It is the player themselves
+      // 2. The recipient is the host
+      const shouldRevealWord = isSelf || isRecipientHost;
 
       return {
         id: p.id,
         name: p.name,
         isConnected: p.isConnected,
-        role: shouldReveal ? p.role : null,
-        word: shouldReveal ? p.word : null
+        role: shouldRevealRole ? p.role : null,
+        word: shouldRevealWord ? p.word : null
       };
     });
 
